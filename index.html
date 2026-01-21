@@ -405,6 +405,11 @@
           
           if (result.error) throw new Error(result.error);
           
+          // FIX 2 (Part B): 
+          // 1. Result se 'startRow' lo.
+          // 2. Data process karte waqt 'realRowIndex' calculate karo.
+          // 3. Empty IDs ko yahi frontend pe filter karo.
+          
           if (result.rows && result.rows.length > 0) {
             const chunkStartRow = result.startRow || ((page - 1) * CHUNK_SIZE + 2); // Fallback logic
             
@@ -439,9 +444,10 @@
     }
 
     // --- OBJECT MAPPING (FIXED) ---
+    // Ab ye 'globalIndex' nahi, balki exact 'sheetRowIndex' leta hai
     function mapRowToObject(row, sheetRowIndex) {
       return {
-        id:           row[0]  || "",  
+        id:           row[0]  || "",  // Empty check frontend ke liye chhod diya     
         reviewer:     row[2]  || "N/A",            
         product:      row[3]  || "N/A",            
         dealType:     row[4]  || "General",        
@@ -458,7 +464,7 @@
         mediator:     row[15] || "N/A",            
         phone:        row[16] || "",               
         status:       (row[18] || "").toUpperCase().trim(),
-        rowIndex:     sheetRowIndex, 
+        rowIndex:     sheetRowIndex, // FIX 2: Ye ab 100% accurate sheet row hai
         logicStatus:  "VALID" 
       };
     }
@@ -557,24 +563,23 @@
             waBtn = `<a href="${waLink}" target="_blank" class="btn-icon btn-wa-icon" title="Send Reminder"><i class="fa-solid fa-bell"></i></a>`;
         }
         
-        // --- UPDATED LAYOUT: RIGHT SIDE NOW SINGLE HORIZONTAL LINE ---
         return `
         <div id="card-wrapper-${item.id}" class="order-card ${themeClass}">
         <div class="card-content">
             <div class="card-head">
-                <div class="card-meta">
-                    <div class="card-badge" style="background:rgba(255,255,255,0.4); color:#2d3436;">ORDER NO ${index + 1}</div>
-                    <div class="card-badge"><i class="fa-solid fa-user"></i> ${item.reviewer}</div>
-                    <div class="card-badge" style="margin-top:5px;"><i class="fa-solid fa-handshake"></i> ${item.mediator}</div>
+            <div style="width:100%; overflow:hidden;">
+                <div class="card-id" onclick="copy('${item.id}')" style="font-size:${idFontSize}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                    ${item.id} <i class="fa-regular fa-copy" style="font-size:0.8em"></i>
                 </div>
-                <div style="display:flex; align-items:center; justify-content:flex-end; gap:8px;">
-                    <div class="card-id" onclick="copy('${item.id}')" style="font-size:${idFontSize}; margin:0; line-height:1;">
-                        ${item.id} <i class="fa-regular fa-copy" style="font-size:0.8em"></i>
-                    </div>
-                    <span class="deal-tag" style="margin:0; display:inline-block;">${item.dealType}</span>
-                    <div class="card-badge" style="margin:0; font-size: 0.65rem;"><i class="fa-solid fa-table-list"></i> ROW ${item.rowIndex}</div>
-                </div>
-                <i class="fa-solid fa-file-invoice head-echo"></i>
+                <span class="deal-tag">${item.dealType}</span>
+                <div class="card-badge" style="margin-top:6px; font-size: 0.65rem;"><i class="fa-solid fa-table-list"></i> ROW ${item.rowIndex}</div>
+            </div>
+            <div class="card-meta">
+                <div class="card-badge" style="background:rgba(255,255,255,0.4); color:#2d3436;">ORDER NO ${index + 1}</div>
+                <div class="card-badge"><i class="fa-solid fa-user"></i> ${item.reviewer}</div>
+                <div class="card-badge" style="margin-top:5px;"><i class="fa-solid fa-handshake"></i> ${item.mediator}</div>
+            </div>
+            <i class="fa-solid fa-file-invoice head-echo"></i>
             </div>
             <div class="glass-panel">
             <div class="prod-name"><i class="fa-solid fa-mobile-screen"></i> &nbsp; ${item.product}</div>
@@ -828,5 +833,3 @@
 
     setInterval(()=>{ if(!USE_DEMO_MODE) apiCall('serverPing').catch(e => console.log("Ping failed")); }, 180000);
   </script>
-</body>
-        </html>
