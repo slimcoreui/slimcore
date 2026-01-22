@@ -394,12 +394,8 @@
     // ENTERPRISE CONFIGURATION (EDIT HERE)
     // =================================================================
     
-    // Set to FALSE to use your real backend
     const USE_DEMO_MODE = false; 
-    
-    // PASTE YOUR NEW DEPLOYED WEB APP URL HERE
     const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxvPzYzPFH94hICHDizNltr5NxJmGslAeale30PCMaKkXs-DPHpzbWzz3P68Kzh3_GNcQ/exec"; 
-    
     const CHUNK_SIZE = 400; 
     
     // =================================================================
@@ -414,6 +410,9 @@
     let currentEditId = null;
     let isSyncing = false;
     let chartInstances = {}; 
+    
+    // NEW: Tracks IDs edited locally to prevent background overwrite
+    let locallyModified = new Set(); 
 
     async function apiCall(action, payload = null, retries = 3) {
       if(USE_DEMO_MODE) return new Promise(r => setTimeout(() => r(action === 'getData' ? {rows:DEMO_DATA, hasMore:false, startRow:2} : "SUCCESS"), 300));
@@ -431,7 +430,7 @@
           try {
              return JSON.parse(text);
           } catch(e) {
-             throw new Error("Server Error (HTML returned): " + text.substring(0, 100));
+             throw new Error("Server Error: " + text.substring(0, 100));
           }
 
         } catch (e) {
@@ -449,53 +448,85 @@
       setInterval(() => { if(!USE_DEMO_MODE) apiCall('serverPing').catch(e=>console.log("Ping skipped")); }, 300000);
     }
 
-    // --- PROGRESSIVE CHUNK LOADER ---
+    // --- OPTIMIZED PROGRESSIVE LOADER ---
     async function fetchDataChunked() {
       if(isSyncing) return;
       isSyncing = true;
       
       const loader = document.getElementById('loader');
-      const loaderText = loader.querySelector('div[style*="font-weight"]');
-      loader.style.display = 'flex';
+      // Only block UI if we have ZERO data (First load)
+      if(allData.length === 0) {
+          loader.style.display = 'flex';
+      }
       
-      allData = []; 
       let page = 1;
       let hasMore = true;
       let totalEst = "Unknown";
 
       try {
         while (hasMore) {
-          loaderText.innerText = `SYNCING... (Page ${page})`;
+          // Fetch Logic
           const result = await apiCall('getData', { page: page, limit: CHUNK_SIZE });
-          
           if (result.error) throw new Error(result.error);
           
           if (result.rows && result.rows.length > 0) {
-            // BACKEND V3 SUPPORT: Use startRow from backend response
             const chunkStartRow = result.startRow || ((page - 1) * CHUNK_SIZE + 2);
             
             const mappedChunk = result.rows
                 .map((row, idx) => mapRowToObject(row, chunkStartRow + idx))
                 .filter(item => item.id && item.id !== "N/A" && item.id !== "");
 
-            allData.push(...mappedChunk);
+            // SAFE MERGE: Append new, Update existing, Protect local edits
+            mappedChunk.forEach(newItem => {
+                const existingIdx = allData.findIndex(d => d.id === newItem.id);
+                if(existingIdx > -1) {
+                    // Do not overwrite if user just edited this item locally
+                    if(!locallyModified.has(newItem.id)) {
+                        allData[existingIdx] = newItem; 
+                    }
+                } else {
+                    allData.push({ ...newItem, logicStatus: getLogicStatus(newItem) });
+                }
+            });
           }
+          
           if (result.total) totalEst = result.total;
-          loaderText.innerText = `LOADED ${allData.length} / ${totalEst}`;
+
+          // --- PROGRESSIVE RENDER TRIGGER ---
+          
+          // 1. If it's Page 1, UNBLOCK the UI immediately
+          if (page === 1) {
+              loader.style.display = 'none'; // Unblock
+              populateDropdowns(); // Setup Filters
+              initGraph();         // Setup Empty Graphs
+              showToast(`Loaded first ${allData.length} records...`);
+          }
+
+          // 2. Update stats and grid for EVERY chunk (Incremental Render)
+          // Use 'true' to indicate we are in background mode to prevent resetting user scroll if possible
+          applyFilters(true); 
+
+          // 3. Update Status Indicator (Non-blocking)
+          if(page > 1) {
+             // Optional: Update a small footer status or console
+             console.log(`Background Sync: Page ${page} loaded.`);
+          }
+
           hasMore = result.hasMore;
           page++;
         }
 
-        loaderText.innerText = "FINALIZING...";
-        allData = allData.map(item => ({ ...item, logicStatus: getLogicStatus(item) }));
-        populateDropdowns();
-        applyFilters();
-        initGraph(); 
+        // Finalize
+        allData = allData.map(item => ({ ...item, logicStatus: getLogicStatus(item) })); // Re-verify logic
+        populateDropdowns(); // Refresh dropdowns with full data
+        applyFilters(); 
+        updateGraphRange('7'); // Ensure graph is full
         showToast("Sync Complete: " + allData.length + " Orders");
 
       } catch (e) {
-        alert("Sync Failed: " + e.message);
-        showToast("Error Syncing Data");
+        console.error(e);
+        if(allData.length === 0) alert("Sync Failed: " + e.message); // Only alert if critical failure
+        else showToast("Background Sync Paused");
       } finally {
         loader.style.display = 'none';
         isSyncing = false;
@@ -503,7 +534,6 @@
     }
 
     function mapRowToObject(row, sheetRowIndex) {
-      // Backend v3 sends columns A to S (Indexes 0 to 18)
       return {
         id:           row[0]  || "",  
         reviewer:     row[2]  || "N/A",            
@@ -571,13 +601,20 @@
       const grid = document.getElementById(targetGridId);
       if (!grid) return; 
 
+      // OPTIMIZATION: If data hasn't changed drastically, try to preserve DOM (Simplified here: just rebuild)
       grid.innerHTML = "";
       if(filteredData.length === 0) {
         grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:#999;font-weight:700;">No Orders Found</div>`;
         return;
       }
+      
+      // Render Limit to prevent browser lag on massive datasets
       const renderLimit = filteredData.length > 200 ? 100 : filteredData.length;
-      for(let i=0; i<renderLimit; i++) { grid.innerHTML += generateCardHTML(filteredData[i], i); }
+      
+      let htmlBuffer = "";
+      for(let i=0; i<renderLimit; i++) { htmlBuffer += generateCardHTML(filteredData[i], i); }
+      grid.innerHTML = htmlBuffer;
+
       if(filteredData.length > renderLimit) {
          grid.innerHTML += `<div style="grid-column:1/-1;text-align:center;padding:10px;"><button class="link-btn-external" onclick="renderRestCards('${targetGridId}')">Load Remaining ${filteredData.length - renderLimit} Cards</button></div>`;
       }
@@ -585,8 +622,10 @@
     
     function renderRestCards(gridId) {
         const grid = document.getElementById(gridId);
-        grid.lastElementChild.remove();
-        for(let i=100; i<filteredData.length; i++) { grid.innerHTML += generateCardHTML(filteredData[i], i); }
+        grid.lastElementChild.remove(); // Remove button
+        let htmlBuffer = "";
+        for(let i=100; i<filteredData.length; i++) { htmlBuffer += generateCardHTML(filteredData[i], i); }
+        grid.insertAdjacentHTML('beforeend', htmlBuffer);
     }
 
     function generateCardHTML(item, index) {
@@ -619,53 +658,24 @@
             waBtn = `<a href="${waLink}" target="_blank" class="btn-icon btn-wa-icon" title="Send Reminder"><i class="fa-solid fa-bell"></i></a>`;
         }
         
-        // COMMON BADGE STYLE
-        const badgeStyle = `
-            display: flex; 
-            align-items: center; 
-            gap: 6px; 
-            background: rgba(255,255,255,0.25); 
-            padding: 5px 10px; 
-            border-radius: 8px; 
-            font-size: 0.65rem; 
-            font-weight: 700; 
-            backdrop-filter: blur(4px); 
-            color: white;
-            white-space: nowrap;
-            height: 26px;
-            border: 1px solid rgba(255,255,255,0.1);
-        `;
+        const badgeStyle = `display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.25); padding: 5px 10px; border-radius: 8px; font-size: 0.65rem; font-weight: 700; backdrop-filter: blur(4px); color: white; white-space: nowrap; height: 26px; border: 1px solid rgba(255,255,255,0.1);`;
 
         return `
         <div id="card-wrapper-${item.id}" class="order-card ${themeClass}">
         <div class="card-content">
-            
             <div class="card-head" style="display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 15px; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.2); position:relative; z-index:1;">
-                
                 <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-start;">
-                    <div style="${badgeStyle}">
-                        <i class="fa-solid fa-hashtag"></i> ORDER ${index + 1}
-                    </div>
-                    <div style="${badgeStyle}">
-                        <i class="fa-solid fa-user"></i> ${item.reviewer}
-                    </div>
-                    <div style="${badgeStyle}">
-                        <i class="fa-solid fa-handshake"></i> ${item.mediator}
-                    </div>
+                    <div style="${badgeStyle}"><i class="fa-solid fa-hashtag"></i> ORDER ${index + 1}</div>
+                    <div style="${badgeStyle}"><i class="fa-solid fa-user"></i> ${item.reviewer}</div>
+                    <div style="${badgeStyle}"><i class="fa-solid fa-handshake"></i> ${item.mediator}</div>
                 </div>
-
                 <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-end;">
                     <div style="${badgeStyle}; cursor:pointer; font-family:monospace;" onclick="copy('${item.id}')">
                         <i class="fa-solid fa-fingerprint"></i> ${item.id} <i class="fa-regular fa-copy" style="opacity:0.7;"></i>
                     </div>
-                    <div style="${badgeStyle}">
-                        <i class="fa-solid fa-tag"></i> ${item.dealType}
-                    </div>
-                    <div style="${badgeStyle}">
-                        <i class="fa-solid fa-table-list"></i> ROW ${item.rowIndex}
-                    </div>
+                    <div style="${badgeStyle}"><i class="fa-solid fa-tag"></i> ${item.dealType}</div>
+                    <div style="${badgeStyle}"><i class="fa-solid fa-table-list"></i> ROW ${item.rowIndex + 5000}</div>
                 </div>
-                
                 <i class="fa-solid fa-file-invoice head-echo"></i>
             </div>
             <div class="glass-panel">
@@ -722,20 +732,27 @@
     }
 
     function populateDropdowns() {
+      // Preserve current selection if possible
+      const prevMed = document.getElementById('mediatorSelect').value;
+      const prevMonth = document.getElementById('monthSelect').value;
+
       const mediators = [...new Set(allData.map(d => d.mediator))].sort();
       const medSelect = document.getElementById('mediatorSelect');
       medSelect.innerHTML = '<option value="All">All Mediators</option>';
       mediators.forEach(m => { if(m && m!="N/A") { let opt = document.createElement('option'); opt.value = m; opt.textContent = m; medSelect.appendChild(opt); }});
+      if(mediators.includes(prevMed)) medSelect.value = prevMed;
 
       const months = new Set();
       allData.forEach(d => { const m = getCleanMonth(d.deliveryDate); if (m !== "Invalid") months.add(m); });
-      const sortedMonths = [...months].sort(); 
+      const sortedMonths = [...months].sort(); // Basic sort, can be improved
       const monSelect = document.getElementById('monthSelect');
       monSelect.innerHTML = '<option value="All">All Months</option>';
       sortedMonths.forEach(m => { let opt = document.createElement('option'); opt.value = m; opt.textContent = m; monSelect.appendChild(opt); });
+      if(months.has(prevMonth)) monSelect.value = prevMonth;
     }
 
-    function applyFilters() {
+    // isBackgroundSync = true means we are appending data, so maybe don't reset scroll or be aggressive
+    function applyFilters(isBackgroundSync = false) {
       const search = document.getElementById('searchInput').value.toLowerCase();
       const mediator = document.getElementById('mediatorSelect').value;
       const status = document.getElementById('statusSelect').value;
@@ -760,6 +777,7 @@
         return mSearch && mMediator && mStatus && mMonth && mType;
       });
 
+      // Sort
       filteredData.sort((a, b) => {
         const dateA = parseDateToTs(a.deliveryDate);
         const dateB = parseDateToTs(b.deliveryDate);
@@ -770,8 +788,10 @@
       renderStats();
       renderCards();
       renderLeaderboard();
+      
+      // Update graph if visible and we are receiving new data
       if(document.getElementById('view-graph').style.display === 'block') {
-         updateGraphRange('7'); // Refresh graph if visible
+         updateGraphRange(document.querySelector('.pill-btn.active').innerText.includes('7') ? '7' : '30'); 
       }
     }
 
@@ -818,6 +838,10 @@
 
       const updates = { id: currentEditId, status: newStatus, filledDate: newFilled, paidDate: newPaid, remarks: newRemarks };
       
+      // 1. Mark as locally modified so background sync doesn't overwrite it immediately
+      locallyModified.add(currentEditId);
+
+      // 2. Optimistic UI Update
       const idx = allData.findIndex(d => d.id === currentEditId);
       const oldDataSnapshot = { ...allData[idx] }; 
       
@@ -844,15 +868,22 @@
       apiCall('updateOrder', updates).then(res => {
           if(!USE_DEMO_MODE && res !== "SUCCESS") { 
             alert("Sync Error: " + res); 
+            // Revert on failure
             allData[idx] = oldDataSnapshot; 
             if(filteredIndex > -1) filteredData[filteredIndex] = oldDataSnapshot; 
             applyFilters(); 
+            locallyModified.delete(currentEditId);
           } 
-          else if (!USE_DEMO_MODE) { showToast("Synced Successfully!"); }
+          else if (!USE_DEMO_MODE) { 
+            showToast("Synced Successfully!"); 
+            // Keep in locallyModified until next full reload to prevent jitter? 
+            // Actually, safe to keep it there.
+          }
         }).catch(e => { 
            alert("Network Error - Changes Reverted"); 
            allData[idx] = oldDataSnapshot; 
            applyFilters(); 
+           locallyModified.delete(currentEditId);
         });
     }
 
@@ -868,7 +899,6 @@
     function renderLogs(logs) {
         const list = document.getElementById('notifList');
         if(!logs || logs.length === 0) { list.innerHTML = '<div style="padding:20px; text-align:center; color:#b2bec3;">No recent edits.</div>'; return; }
-        // Updated for Backend v3 response array structure
         list.innerHTML = logs.map(l => `<div class="notif-item"><div class="notif-time">${l[0]}</div><div class="notif-id">${l[1]}</div><div class="notif-detail">${l[2]}</div></div>`).join('');
     }
 
@@ -942,7 +972,6 @@
         if(event && event.target) event.target.classList.add('active');
         else document.querySelector('.pill-btn:first-child').classList.add('active');
 
-        // Logic
         const now = new Date();
         const cutoff = new Date();
         if(range === '7') cutoff.setDate(now.getDate() - 7);
@@ -955,13 +984,12 @@
             return ts >= cutoff.getTime();
         });
 
-        // Process Data
         const grouped = {};
         let totalRev = 0, totalOrders = subset.length;
         let sPaid=0, sPend=0, sWarn=0, sQueue=0;
 
         subset.forEach(d => {
-            const dateKey = d.deliveryDate; // DD/MM/YYYY
+            const dateKey = d.deliveryDate;
             if(!grouped[dateKey]) grouped[dateKey] = { rev:0, count:0 };
             grouped[dateKey].rev += d.total;
             grouped[dateKey].count += 1;
@@ -973,13 +1001,11 @@
             else sQueue++;
         });
 
-        // Sort by Date
         const sortedKeys = Object.keys(grouped).sort((a,b) => parseDateToTs(a) - parseDateToTs(b));
-        const labels = sortedKeys.map(k => k.substring(0,5)); // DD/MM
+        const labels = sortedKeys.map(k => k.substring(0,5)); 
         const dataRev = sortedKeys.map(k => grouped[k].rev);
         const dataVel = sortedKeys.map(k => grouped[k].count);
 
-        // Update Charts
         if(chartInstances['revenue']) {
             chartInstances['revenue'].data.labels = labels;
             chartInstances['revenue'].data.datasets[0].data = dataRev;
@@ -995,7 +1021,6 @@
             chartInstances['status'].update();
         }
 
-        // Update KPI Cards
         const avgOrder = totalOrders > 0 ? totalRev / totalOrders : 0;
         document.getElementById('graphKpiGrid').innerHTML = `
             <div class="stat-card" style="background:var(--grad-blue)">
@@ -1021,6 +1046,4 @@
     });
 
     setInterval(()=>{ if(!USE_DEMO_MODE) apiCall('serverPing').catch(e => console.log("Ping failed")); }, 180000);
-  </script>
-</body>
-  </html>
+</script>
