@@ -389,292 +389,150 @@
   <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
   <script>eruda.init();</script>
 
-<style>
-  /* SAAS MODAL STYLES */
-  .saas-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 99999; display: none; justify-content: center; align-items: center; backdrop-filter: blur(8px); }
-  .saas-overlay.active { display: flex; animation: fadeIn 0.3s; }
-  .saas-box { background: white; width: 90%; max-width: 420px; padding: 25px; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.4); text-align: center; position: relative; border-top: 6px solid #0984e3; font-family: 'Poppins', sans-serif; }
-  .saas-icon { font-size: 3rem; margin-bottom: 15px; display: block; }
-  .saas-title { font-size: 1.4rem; font-weight: 800; color: #2d3436; margin-bottom: 10px; }
-  .saas-text { font-size: 0.9rem; color: #636e72; line-height: 1.5; margin-bottom: 20px; }
-  .saas-input { width: 100%; padding: 12px; border: 2px solid #dfe6e9; border-radius: 10px; font-size: 1rem; margin-bottom: 15px; outline: none; transition: 0.2s; }
-  .saas-input:focus { border-color: #0984e3; }
-  .saas-btn { width: 100%; padding: 14px; border: none; border-radius: 12px; font-weight: 700; font-size: 0.9rem; cursor: pointer; margin-bottom: 10px; transition: 0.2s; text-transform: uppercase; }
-  .saas-btn-primary { background: #0984e3; color: white; box-shadow: 0 4px 15px rgba(9, 132, 227, 0.3); }
-  .saas-btn-primary:hover { transform: translateY(-2px); }
-  .saas-btn-sec { background: #f1f2f6; color: #2d3436; }
-  .saas-btn-sec:hover { background: #dfe6e9; }
-  .saas-email-box { background: #fff3cd; color: #856404; padding: 10px; border-radius: 8px; font-family: monospace; font-weight: 700; margin-bottom: 15px; border: 1px dashed #ffeeba; user-select: all; font-size: 0.8rem; word-break: break-all; }
-  .saas-trust { font-size: 0.7rem; color: #b2bec3; margin-top: 15px; border-top: 1px solid #f1f2f6; padding-top: 10px; display: flex; align-items: center; justify-content: center; gap: 5px; }
-  .saas-close { position: absolute; top: 15px; right: 15px; cursor: pointer; color: #b2bec3; font-size: 1.2rem; }
-  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-</style>
-
-<div id="saasOverlay" class="saas-overlay">
-  <div id="saasContent" class="saas-box">
-    </div>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-<script>eruda.init();</script>
-
 <script>
     // =================================================================
-    // ENTERPRISE CONFIGURATION
+    // ENTERPRISE CONFIGURATION (EDIT HERE)
     // =================================================================
     
-    const USE_DEMO_MODE = false; // Set to FALSE for Production
-    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwd6UhDaIPTjinqpa2AAYX_b5VShScPZFfyLxCmrIxW8V_Gei937ljKm9ZDsq3Hvuzxjw/exec"; // <--- PASTE NEW URL HERE
-    const SCRIPT_EMAIL = "searchki25y@gmail.com"; // <--- PASTE YOUR EMAIL HERE
+    const USE_DEMO_MODE = false; 
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxvPzYzPFH94hICHDizNltr5NxJmGslAeale30PCMaKkXs-DPHpzbWzz3P68Kzh3_GNcQ/exec"; 
     const CHUNK_SIZE = 400; 
-
-    // =================================================================
-    // GLOBAL STATE
-    // =================================================================
-    let CURRENT_USER = localStorage.getItem('preorder_user') || "";
-    let URL_USER = "<?= urlUser ?>"; // Injected by Backend
     
+    // =================================================================
+
+    const DEMO_DATA = [
+      ["ORD-DEMO-1", "", "Rahul Kumar", "iPhone 15 Pro", "Preorder", "130000", "0", "500", "130500", "05/01/2025", "06/01/2025", "10/01/2025", "10/01/2025", "Smooth transaction", "", "Amit Singh", "919876543210", "", "PAID"],
+      ["ORD-DEMO-2", "", "Priya Sharma", "Samsung S24", "Open Box", "110000", "2000", "0", "108000", "07/01/2025", "08/01/2025", "12/01/2025", "", "Waiting", "", "Amit Singh", "919876543210", "", "PENDING"]
+    ];
+
     let allData = [];
     let filteredData = [];
     let currentEditId = null;
     let isSyncing = false;
     let chartInstances = {}; 
+    
+    // NEW: Tracks IDs edited locally to prevent background overwrite
     let locallyModified = new Set(); 
 
-    // =================================================================
-    // SAAS POPUP SYSTEM
-    // =================================================================
-    const POPUPS = {
-      WELCOME: {
-        icon: '👋', title: 'Welcome to PREORDER',
-        text: 'This dashboard helps you track and manage your preorder refunds in one place. To continue, please enter your registered username.',
-        html: `<button class="saas-btn saas-btn-primary" onclick="showPopup('LOGIN')">Continue with Username</button>
-               <div class="saas-trust"><i class="fa-solid fa-lock"></i> Your data stays in your own Google Sheet.</div>`
-      },
-      LOGIN: {
-        icon: '🔐', title: 'Enter Your Username',
-        text: 'Please enter the username provided by admin (e.g., rahul_preorder).',
-        html: `<input type="text" id="loginInput" class="saas-input" placeholder="Your username">
-               <button class="saas-btn saas-btn-primary" onclick="attemptLogin()">Continue</button>
-               <button class="saas-btn saas-btn-sec" onclick="showPopup('WELCOME')">Back</button>`
-      },
-      CONNECT_OPT: {
-        icon: '🔗', title: 'Connect Your Data',
-        text: 'Choose how you want to connect this dashboard with your data.',
-        html: `<button class="saas-btn saas-btn-primary" onclick="showPopup('SHEET_SETUP')">🔗 Connect via Sheet Link</button>
-               <button class="saas-btn saas-btn-sec" onclick="alert('Use the link provided by your Admin.')">⚡ Use Web App Link</button>
-               <button class="saas-btn saas-btn-sec" onclick="closePopup()">Cancel</button>`
-      },
-      SHEET_SETUP: {
-        icon: '📄', title: 'Connect Google Sheet',
-        text: 'Please share your Google Sheet once with the email below (Editor access) and paste the link.',
-        html: `<div class="saas-email-box">${SCRIPT_EMAIL}</div>
-               <input type="text" id="sheetUrlInput" class="saas-input" placeholder="Paste Google Sheet Link here...">
-               <button class="saas-btn saas-btn-primary" onclick="submitSheetLink()">Connect Sheet</button>
-               <button class="saas-btn saas-btn-sec" onclick="showPopup('CONNECT_OPT')">Back</button>
-               <div class="saas-trust"><i class="fa-solid fa-lock"></i> We only read/update your file.</div>`
-      },
-      PERMISSION_ERR: {
-        icon: '⛔', title: 'Sheet Access Required',
-        text: 'We are unable to access your Google Sheet. Please make sure you have shared it.',
-        html: `<div class="saas-email-box">${SCRIPT_EMAIL}</div>
-               <button class="saas-btn saas-btn-primary" onclick="location.reload()">I Have Shared, Retry</button>`
-      },
-      NO_SHEET: {
-        icon: '⚠️', title: 'Setup Required',
-        text: 'Your account is active, but no Google Sheet is linked yet.',
-        html: `<button class="saas-btn saas-btn-primary" onclick="showPopup('SHEET_SETUP')">Connect My Sheet</button>
-               <button class="saas-btn saas-btn-sec" onclick="logoutUser()">Logout</button>`
-      },
-      PAUSED: {
-        icon: '⏸️', title: 'Account Paused',
-        text: 'Your access has been paused. Please contact admin.',
-        html: `<button class="saas-btn saas-btn-primary" onclick="window.open('mailto:${SCRIPT_EMAIL}')">Contact Admin</button>
-               <button class="saas-btn saas-btn-sec" onclick="logoutUser()">Logout</button>`
-      },
-      BLOCKED: {
-        icon: '🚫', title: 'Access Blocked',
-        text: 'Your account has been blocked. Reach out to admin if this is a mistake.',
-        html: `<button class="saas-btn saas-btn-sec" onclick="logoutUser()">Close</button>`
-      },
-      EXPIRED: {
-        icon: '⏳', title: 'Plan Expired',
-        text: 'Your plan has expired. Please renew to continue.',
-        html: `<button class="saas-btn saas-btn-primary" onclick="window.open('mailto:${SCRIPT_EMAIL}')">Renew Now</button>
-               <button class="saas-btn saas-btn-sec" onclick="logoutUser()">Logout</button>`
-      }
-    };
-
-    function showPopup(key) {
-      const config = POPUPS[key];
-      const el = document.getElementById('saasContent');
-      el.innerHTML = `
-        <div class="saas-icon">${config.icon}</div>
-        <div class="saas-title">${config.title}</div>
-        <div class="saas-text">${config.text}</div>
-        ${config.html}
-      `;
-      document.getElementById('saasOverlay').classList.add('active');
-    }
-
-    function closePopup() { document.getElementById('saasOverlay').classList.remove('active'); }
-
-    function attemptLogin() {
-      const val = document.getElementById('loginInput').value.trim();
-      if (val.length < 3) { alert("Invalid Username"); return; }
-      CURRENT_USER = val;
-      localStorage.setItem('preorder_user', CURRENT_USER);
-      closePopup();
-      location.reload();
-    }
-
-    function logoutUser() {
-      localStorage.removeItem('preorder_user');
-      CURRENT_USER = "";
-      location.reload();
-    }
-
-    async function submitSheetLink() {
-      const url = document.getElementById('sheetUrlInput').value;
-      const btn = document.querySelector('.saas-btn-primary');
-      const orgText = btn.innerText;
-      btn.innerText = "Verifying...";
-      try {
-        const res = await apiCall('registerSheet', { sheetUrl: url });
-        if (res.success) {
-          showToast("Sheet Connected Successfully!");
-          closePopup();
-          location.reload();
-        }
-      } catch (e) { console.error(e); } finally { btn.innerText = orgText; }
-    }
-
-    // =================================================================
-    // API & INIT LAYER
-    // =================================================================
-
-    // Init System on Load
-    window.onload = function() {
-        // Mode B Check
-        if (URL_USER && URL_USER.length > 2) {
-            CURRENT_USER = URL_USER;
-            localStorage.setItem('preorder_user', CURRENT_USER);
-            window.history.replaceState({}, document.title, "/"); // Clean URL
-        }
-
-        if (!CURRENT_USER) {
-            showPopup('WELCOME');
-        } else {
-            // Setup UI
-            const meta = document.querySelector('.meta-bar');
-            if(meta) meta.innerHTML = `USER: ${CURRENT_USER.toUpperCase()}`;
-            
-            const headerLeft = document.querySelector('.header-left');
-            if(headerLeft) {
-                headerLeft.style.cursor = "pointer";
-                headerLeft.onclick = () => showPopup('CONNECT_OPT');
-            }
-
-            // Start Sync
-            initSystem();
-        }
-    };
-
     async function apiCall(action, payload = null, retries = 3) {
-      if(USE_DEMO_MODE) return new Promise(r => setTimeout(() => r(action === 'getData' ? {rows:[], hasMore:false} : "SUCCESS"), 300));
+      if(USE_DEMO_MODE) return new Promise(r => setTimeout(() => r(action === 'getData' ? {rows:DEMO_DATA, hasMore:false, startRow:2} : "SUCCESS"), 300));
       
-      const bodyData = { action: action, payload: payload, username: CURRENT_USER };
-
       for (let i = 0; i < retries; i++) {
         try {
           const response = await fetch(WEB_APP_URL, {
             method: "POST",
-            body: JSON.stringify(bodyData)
+            headers: { "Content-Type": "text/plain;charset=utf-8" }, 
+            body: JSON.stringify({ action: action, payload: payload })
           });
-          const json = await response.json();
+          const text = await response.text();
+          if (!text) throw new Error("Empty Response from Server");
           
-          if(json.error) {
-            handleBackendError(json);
-            throw new Error(json.error);
+          try {
+             return JSON.parse(text);
+          } catch(e) {
+             throw new Error("Server Error: " + text.substring(0, 100));
           }
-          return json;
 
         } catch (e) {
-          if(e.message === "Failed to fetch") { showToast("Network Error"); }
-          if(i === retries - 1) throw e;
-          await new Promise(r => setTimeout(r, 1000)); 
+          console.warn(`Attempt ${i+1} failed: ${e.message}`);
+          if (i === retries - 1) throw e;
+          await new Promise(r => setTimeout(r, 1000 * (i + 1))); 
         }
       }
     }
 
-    function handleBackendError(json) {
-        const code = json.error;
-        if (code === "USER_NOT_FOUND" || code === "AUTH_MISSING") { logoutUser(); showPopup('LOGIN'); }
-        else if (code === "ACCOUNT_PAUSED") showPopup('PAUSED');
-        else if (code === "ACCOUNT_BLOCKED") showPopup('BLOCKED');
-        else if (code === "PLAN_EXPIRED") { POPUPS.EXPIRED.text = `Plan expired on ${json.expiryDate}.`; showPopup('EXPIRED'); }
-        else if (code === "NO_SHEET") showPopup('NO_SHEET');
-        else if (code === "PERMISSION_DENIED" || code === "PERMISSION_LOST") showPopup('PERMISSION_ERR');
-        else showToast("Error: " + (json.message || code));
-    }
-
-    // =================================================================
-    // CORE DASHBOARD LOGIC (Reused & Cleaned)
-    // =================================================================
+    window.onload = function() { initSystem(); };
 
     function initSystem() {
       fetchDataChunked();
-      setInterval(() => { if(!USE_DEMO_MODE) apiCall('serverPing').catch(e=>{}); }, 300000);
+      setInterval(() => { if(!USE_DEMO_MODE) apiCall('serverPing').catch(e=>console.log("Ping skipped")); }, 300000);
     }
 
+    // --- OPTIMIZED PROGRESSIVE LOADER ---
     async function fetchDataChunked() {
       if(isSyncing) return;
       isSyncing = true;
+      
       const loader = document.getElementById('loader');
-      if(allData.length === 0) loader.style.display = 'flex';
+      // Only block UI if we have ZERO data (First load)
+      if(allData.length === 0) {
+          loader.style.display = 'flex';
+      }
       
       let page = 1;
       let hasMore = true;
+      let totalEst = "Unknown";
 
       try {
         while (hasMore) {
+          // Fetch Logic
           const result = await apiCall('getData', { page: page, limit: CHUNK_SIZE });
+          if (result.error) throw new Error(result.error);
           
           if (result.rows && result.rows.length > 0) {
             const chunkStartRow = result.startRow || ((page - 1) * CHUNK_SIZE + 2);
-            const mappedChunk = result.rows.map((row, idx) => mapRowToObject(row, chunkStartRow + idx)).filter(item => item.id);
+            
+            const mappedChunk = result.rows
+                .map((row, idx) => mapRowToObject(row, chunkStartRow + idx))
+                .filter(item => item.id && item.id !== "N/A" && item.id !== "");
 
+            // SAFE MERGE: Append new, Update existing, Protect local edits
             mappedChunk.forEach(newItem => {
                 const existingIdx = allData.findIndex(d => d.id === newItem.id);
                 if(existingIdx > -1) {
-                    if(!locallyModified.has(newItem.id)) allData[existingIdx] = newItem; 
+                    // Do not overwrite if user just edited this item locally
+                    if(!locallyModified.has(newItem.id)) {
+                        allData[existingIdx] = newItem; 
+                    }
                 } else {
                     allData.push({ ...newItem, logicStatus: getLogicStatus(newItem) });
                 }
             });
           }
+          
+          if (result.total) totalEst = result.total;
 
+          // --- PROGRESSIVE RENDER TRIGGER ---
+          
+          // 1. If it's Page 1, UNBLOCK the UI immediately
           if (page === 1) {
-              loader.style.display = 'none';
-              populateDropdowns();
-              initGraph();
+              loader.style.display = 'none'; // Unblock
+              populateDropdowns(); // Setup Filters
+              initGraph();         // Setup Empty Graphs
+              showToast(`Loaded first ${allData.length} records...`);
           }
-          applyFilters(true);
+
+          // 2. Update stats and grid for EVERY chunk (Incremental Render)
+          // Use 'true' to indicate we are in background mode to prevent resetting user scroll if possible
+          applyFilters(true); 
+
+          // 3. Update Status Indicator (Non-blocking)
+          if(page > 1) {
+             // Optional: Update a small footer status or console
+             console.log(`Background Sync: Page ${page} loaded.`);
+          }
+
           hasMore = result.hasMore;
           page++;
         }
+
+        // Finalize
+        allData = allData.map(item => ({ ...item, logicStatus: getLogicStatus(item) })); // Re-verify logic
+        populateDropdowns(); // Refresh dropdowns with full data
         applyFilters(); 
-        updateGraphRange('7'); 
+        updateGraphRange('7'); // Ensure graph is full
         showToast("Sync Complete: " + allData.length + " Orders");
+
       } catch (e) {
-        if(allData.length === 0 && !e.message.includes("USER")) alert("Sync Failed: " + e.message); 
+        console.error(e);
+        if(allData.length === 0) alert("Sync Failed: " + e.message); // Only alert if critical failure
+        else showToast("Background Sync Paused");
       } finally {
         loader.style.display = 'none';
         isSyncing = false;
       }
     }
 
-    // --- HELPER FUNCTIONS ---
     function mapRowToObject(row, sheetRowIndex) {
       return {
         id:           row[0]  || "",  
@@ -698,9 +556,38 @@
         logicStatus:  "VALID" 
       };
     }
-    
-    function parseCurrencyStr(val) { if (!val) return 0; var num = parseFloat(String(val).replace(/[^0-9.-]+/g,"")); return isNaN(num) ? 0 : num; }
-    
+
+    async function downloadCSV() {
+      const btn = document.querySelector('.btn-gold');
+      const orgText = btn.innerHTML;
+      btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> BUILDING CSV...';
+      try {
+        let csvContent = "";
+        let page = 0; 
+        let hasMore = true;
+        while(hasMore) {
+           const res = await apiCall('getCsvChunk', { page: page, limit: 1000 });
+           if(res.error) throw new Error(res.error);
+           if(res.csv) csvContent += (csvContent ? "\n" : "") + res.csv;
+           hasMore = res.hasMore;
+           page++;
+           btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> PART ${page}...`;
+        }
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url); link.setAttribute("download", "Preorder_Full_Export.csv");
+        document.body.appendChild(link); link.click(); document.body.removeChild(link);
+        showToast("Export Complete!");
+      } catch(e) { alert("Export Failed: " + e.message); } finally { btn.innerHTML = orgText; }
+    }
+
+    function parseCurrencyStr(val) {
+        if (!val) return 0;
+        var num = parseFloat(String(val).replace(/[^0-9.-]+/g,""));
+        return isNaN(num) ? 0 : num;
+    }
+
     function getLogicStatus(item) {
         let logicStatus = "VALID";
         if (item.paidDate && item.status !== "PAID") logicStatus = "ERROR";
@@ -708,17 +595,22 @@
         return logicStatus;
     }
 
-    // --- UI RENDERING ---
     function renderCards() {
       const isListView = document.getElementById('view-list').style.display !== 'none';
       const targetGridId = isListView ? 'ordersGridList' : 'ordersGridHome';
       const grid = document.getElementById(targetGridId);
       if (!grid) return; 
-      
+
+      // OPTIMIZATION: If data hasn't changed drastically, try to preserve DOM (Simplified here: just rebuild)
       grid.innerHTML = "";
-      if(filteredData.length === 0) { grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:#999;font-weight:700;">No Orders Found</div>`; return; }
+      if(filteredData.length === 0) {
+        grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:#999;font-weight:700;">No Orders Found</div>`;
+        return;
+      }
       
+      // Render Limit to prevent browser lag on massive datasets
       const renderLimit = filteredData.length > 200 ? 100 : filteredData.length;
+      
       let htmlBuffer = "";
       for(let i=0; i<renderLimit; i++) { htmlBuffer += generateCardHTML(filteredData[i], i); }
       grid.innerHTML = htmlBuffer;
@@ -730,29 +622,40 @@
     
     function renderRestCards(gridId) {
         const grid = document.getElementById(gridId);
-        grid.lastElementChild.remove();
+        grid.lastElementChild.remove(); // Remove button
         let htmlBuffer = "";
         for(let i=100; i<filteredData.length; i++) { htmlBuffer += generateCardHTML(filteredData[i], i); }
         grid.insertAdjacentHTML('beforeend', htmlBuffer);
     }
 
     function generateCardHTML(item, index) {
-        let themeClass = "card-queues", textClass = "text-queues", displayStatus = item.status || "QUEUES";
+        let themeClass = "card-queues"; 
+        let textClass = "text-queues";
+        let displayStatus = item.status || "QUEUES";
+
         if (item.status === "PAID") { themeClass = "card-paid"; textClass = "text-paid"; } 
         else if (item.status === "PENDING") { themeClass = "card-pending"; textClass = "text-pend"; } 
         else if (item.status === "WARNING") { themeClass = "card-error"; textClass = "text-err"; }
         if (item.logicStatus === "ERROR") { themeClass = "card-error"; textClass = "text-err"; displayStatus = "ERROR (Check)"; }
 
+        const idLen = item.id.length;
+        let idFontSize = "0.75rem"; 
+        if (idLen > 25) idFontSize = "0.65rem";
+
         let middleRow = "";
         if (item.deducted > 0) middleRow = `<div class="money-row"><span>Deducted</span><span style="color:#ffcccc; font-weight:700;">-${fmt(item.deducted)}</span></div>`;
         else if (item.commission > 0) middleRow = `<div class="money-row"><span>Commission</span><span style="color:#55efc4; font-weight:700;">+${fmt(item.commission)}</span></div>`;
         
-        let formBtn = "", waBtn = "";
-        if(item.formLink && item.formLink.trim().length > 5) formBtn = `<a href="${item.formLink}" target="_blank" class="link-btn-external"><i class="fa-solid fa-arrow-up-right-from-square"></i> OPEN FORM</a>`;
+        let formBtn = "";
+        if(item.formLink && item.formLink.trim().length > 5){
+            formBtn = `<a href="${item.formLink}" target="_blank" class="link-btn-external"><i class="fa-solid fa-arrow-up-right-from-square"></i> OPEN FORM</a>`;
+        }
+
+        let waBtn = "";
         if(item.phone && item.phone.trim().length > 5) {
-            const msg = `Hi _${item.mediator}_, \uD83D\uDC4B\n\n\uD83D\uDCC3 Refund Reminder\n\n*\uD83D\uDCE6 Order ID: \`${item.id}\`*\nTotal Due: ${fmt(item.refundable)}\n\n~PREORDER`;
+            const msg = `Hi _${item.mediator}_, \uD83D\uDC4B\n\n\uD83D\uDCC3 This is a kind reminder regarding the refund for these orders\uD83D\uDC47\uD83C\uDFFB\n\n*\uD83D\uDCE6 Order ID: \`${item.id}\`*\n\n\u26A0\uFE0F _The refund timeline is today, please process this at the earliest._ \uD83D\uDEA8\n\nTotal Refund Due: ${fmt(item.refundable)}\n\n~PREORDER \u303D\uFE0F`;
             const waLink = `https://wa.me/${item.phone}?text=${encodeURIComponent(msg)}`;
-            waBtn = `<a href="${waLink}" target="_blank" class="btn-icon btn-wa-icon"><i class="fa-solid fa-bell"></i></a>`;
+            waBtn = `<a href="${waLink}" target="_blank" class="btn-icon btn-wa-icon" title="Send Reminder"><i class="fa-solid fa-bell"></i></a>`;
         }
         
         const badgeStyle = `display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.25); padding: 5px 10px; border-radius: 8px; font-size: 0.65rem; font-weight: 700; backdrop-filter: blur(4px); color: white; white-space: nowrap; height: 26px; border: 1px solid rgba(255,255,255,0.1);`;
@@ -760,18 +663,24 @@
         return `
         <div id="card-wrapper-${item.id}" class="order-card ${themeClass}">
         <div class="card-content">
-            <div class="card-head">
-                <div style="display:flex; flex-direction:column; gap:6px;">
+            <div class="card-head" style="display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 15px; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.2); position:relative; z-index:1;">
+                <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-start;">
                     <div style="${badgeStyle}"><i class="fa-solid fa-hashtag"></i> ORDER ${index + 1}</div>
                     <div style="${badgeStyle}"><i class="fa-solid fa-user"></i> ${item.reviewer}</div>
+                    <div style="${badgeStyle}"><i class="fa-solid fa-handshake"></i> ${item.mediator}</div>
                 </div>
                 <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-end;">
-                    <div style="${badgeStyle}; cursor:pointer; font-family:monospace;" onclick="copy('${item.id}')"><i class="fa-solid fa-fingerprint"></i> ${item.id}</div>
+                    <div style="${badgeStyle}; cursor:pointer; font-family:monospace;" onclick="copy('${item.id}')">
+                        <i class="fa-solid fa-fingerprint"></i> ${item.id} <i class="fa-regular fa-copy" style="opacity:0.7;"></i>
+                    </div>
                     <div style="${badgeStyle}"><i class="fa-solid fa-tag"></i> ${item.dealType}</div>
+                    <div style="${badgeStyle}"><i class="fa-solid fa-table-list"></i> ROW ${item.rowIndex + 5000}</div>
                 </div>
                 <i class="fa-solid fa-file-invoice head-echo"></i>
             </div>
-            <div class="glass-panel"><div class="prod-name"><i class="fa-solid fa-mobile-screen"></i> &nbsp; ${item.product}</div></div>
+            <div class="glass-panel">
+            <div class="prod-name"><i class="fa-solid fa-mobile-screen"></i> &nbsp; ${item.product}</div>
+            </div>
             <div class="glass-panel">
             <div class="money-row"><span>Total</span><span>${fmt(item.total)}</span></div>
             ${middleRow}
@@ -781,25 +690,68 @@
             <div class="date-grid">
                 <div class="date-item"><span>DELIVERED</span><div><i class="fa-solid fa-truck-fast"></i> ${item.deliveryDate||'-'}</div></div>
                 <div class="date-item"><span>FILLED</span><div><i class="fa-solid fa-pen-nib"></i> ${item.filledDate||'-'}</div></div>
-                <div class="date-item"><span>REFUND</span><div><i class="fa-solid fa-clock-rotate-left"></i> ${item.refundDate||'-'}</div></div>
-                <div class="date-item"><span>PAID</span><div><i class="fa-solid fa-calendar-check"></i> ${item.paidDate||'-'}</div></div>
+                <div class="date-item"><span>REFUND DATE</span><div><i class="fa-solid fa-clock-rotate-left"></i> ${item.refundDate||'-'}</div></div>
+                <div class="date-item"><span>PAID DATE</span><div><i class="fa-solid fa-calendar-check"></i> ${item.paidDate||'-'}</div></div>
             </div>
             </div>
-            <div class="glass-panel"><div class="memo-text"><i class="fa-solid fa-quote-left"></i> &nbsp; ${item.remarks||'No Timeline Info'}</div></div>
+            <div class="glass-panel">
+            <div class="memo-text"><i class="fa-solid fa-quote-left"></i> &nbsp; ${item.remarks||'No Timeline Info'}</div>
+            </div>
             <div class="action-row">
             <div class="status-pill-card ${textClass}">${displayStatus}</div>
-            <div class="icon-group">${waBtn}<button class="btn-icon btn-edit-icon" onclick="openEditModal('${item.id}')"><i class="fa-solid fa-pen"></i></button></div>
+            <div class="icon-group">
+                ${waBtn}
+                <button class="btn-icon btn-edit-icon" onclick="openEditModal('${item.id}')"><i class="fa-solid fa-pen"></i></button>
+            </div>
             ${formBtn}
             </div>
         </div>
         </div>`;
     }
 
-    // --- UTILS & INTERACTIONS ---
-    function autoFillDate() { if(document.getElementById('editStatus').value === "PAID") { const d=new Date(); document.getElementById('editPaid').value = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`; } }
-    function handleSearchKey() { document.getElementById('searchClearBtn').style.display = document.getElementById('searchInput').value.length > 0 ? 'block' : 'none'; applyFilters(); }
-    function clearSearch() { document.getElementById('searchInput').value = ''; document.getElementById('searchClearBtn').style.display = 'none'; applyFilters(); }
-    
+    function autoFillDate() {
+        const val = document.getElementById('editStatus').value;
+        if (val === "PAID") {
+            const d = new Date();
+            const day = String(d.getDate()).padStart(2, '0');
+            const month = String(d.getMonth() + 1).padStart(2, '0'); 
+            const year = d.getFullYear();
+            document.getElementById('editPaid').value = `${day}/${month}/${year}`;
+        }
+    }
+
+    function handleSearchKey() {
+        const val = document.getElementById('searchInput').value;
+        document.getElementById('searchClearBtn').style.display = val.length > 0 ? 'block' : 'none';
+        applyFilters();
+    }
+    function clearSearch() {
+        document.getElementById('searchInput').value = '';
+        document.getElementById('searchClearBtn').style.display = 'none';
+        applyFilters();
+    }
+
+    function populateDropdowns() {
+      // Preserve current selection if possible
+      const prevMed = document.getElementById('mediatorSelect').value;
+      const prevMonth = document.getElementById('monthSelect').value;
+
+      const mediators = [...new Set(allData.map(d => d.mediator))].sort();
+      const medSelect = document.getElementById('mediatorSelect');
+      medSelect.innerHTML = '<option value="All">All Mediators</option>';
+      mediators.forEach(m => { if(m && m!="N/A") { let opt = document.createElement('option'); opt.value = m; opt.textContent = m; medSelect.appendChild(opt); }});
+      if(mediators.includes(prevMed)) medSelect.value = prevMed;
+
+      const months = new Set();
+      allData.forEach(d => { const m = getCleanMonth(d.deliveryDate); if (m !== "Invalid") months.add(m); });
+      const sortedMonths = [...months].sort(); // Basic sort, can be improved
+      const monSelect = document.getElementById('monthSelect');
+      monSelect.innerHTML = '<option value="All">All Months</option>';
+      sortedMonths.forEach(m => { let opt = document.createElement('option'); opt.value = m; opt.textContent = m; monSelect.appendChild(opt); });
+      if(months.has(prevMonth)) monSelect.value = prevMonth;
+    }
+
+    // isBackgroundSync = true means we are appending data, so maybe don't reset scroll or be aggressive
     function applyFilters(isBackgroundSync = false) {
       const search = document.getElementById('searchInput').value.toLowerCase();
       const mediator = document.getElementById('mediatorSelect').value;
@@ -812,7 +764,10 @@
         const mSearch = item.id.toLowerCase().includes(search) || item.reviewer.toLowerCase().includes(search) || item.product.toLowerCase().includes(search);
         const mMediator = (mediator === "All") || (item.mediator === mediator);
         let mStatus = true;
-        if(status !== "All") mStatus = status === "QUEUES" ? (item.status === "" || item.status === null) : (item.status === status);
+        if(status !== "All") {
+            if(status === "QUEUES") mStatus = (item.status === "" || item.status === null);
+            else mStatus = (item.status === status);
+        }
         const mMonth = (month === "All") || (getCleanMonth(item.deliveryDate) === month);
         let mType = true;
         if(type === "LESS") mType = (item.deducted > 0);
@@ -822,15 +777,22 @@
         return mSearch && mMediator && mStatus && mMonth && mType;
       });
 
+      // Sort
       filteredData.sort((a, b) => {
-        const dateA = parseDateToTs(a.deliveryDate), dateB = parseDateToTs(b.deliveryDate);
-        return sortOrder === 'DESC' ? dateB - dateA : dateA - dateB;
+        const dateA = parseDateToTs(a.deliveryDate);
+        const dateB = parseDateToTs(b.deliveryDate);
+        if (sortOrder === 'DESC') return dateB - dateA; 
+        return dateA - dateB; 
       });
 
       renderStats();
       renderCards();
       renderLeaderboard();
-      if(document.getElementById('view-graph').style.display === 'block') updateGraphRange(document.querySelector('.pill-btn.active').innerText.includes('7') ? '7' : '30');
+      
+      // Update graph if visible and we are receiving new data
+      if(document.getElementById('view-graph').style.display === 'block') {
+         updateGraphRange(document.querySelector('.pill-btn.active').innerText.includes('7') ? '7' : '30'); 
+      }
     }
 
     function renderStats() {
@@ -845,26 +807,9 @@
 
     function renderLeaderboard() {
       const map = {};
-      filteredData.forEach(d => { if(d.mediator && d.mediator !== "N/A") { map[d.mediator] = (map[d.mediator]||0) + 1; }});
+      filteredData.forEach(d => { if(d.mediator && d.mediator !== "N/A") { if(!map[d.mediator]) map[d.mediator]=0; map[d.mediator]++; }});
       const sorted = Object.entries(map).sort((a,b)=>b[1]-a[1]).slice(0,5);
       document.getElementById('leaderboardList').innerHTML = sorted.map((i,x)=>`<div class="leader-row"><span style="color:white; opacity:0.8;">#${x+1} ${i[0]}</span><span style="font-weight:700;">${i[1]} Orders</span></div>`).join('');
-    }
-
-    function populateDropdowns() {
-      const prevMed = document.getElementById('mediatorSelect').value;
-      const prevMonth = document.getElementById('monthSelect').value;
-      const mediators = [...new Set(allData.map(d => d.mediator))].sort();
-      const medSelect = document.getElementById('mediatorSelect');
-      medSelect.innerHTML = '<option value="All">All Mediators</option>';
-      mediators.forEach(m => { if(m && m!="N/A") { let opt = document.createElement('option'); opt.value = m; opt.textContent = m; medSelect.appendChild(opt); }});
-      if(mediators.includes(prevMed)) medSelect.value = prevMed;
-
-      const months = new Set();
-      allData.forEach(d => { const m = getCleanMonth(d.deliveryDate); if (m !== "Invalid") months.add(m); });
-      const monSelect = document.getElementById('monthSelect');
-      monSelect.innerHTML = '<option value="All">All Months</option>';
-      [...months].sort().forEach(m => { let opt = document.createElement('option'); opt.value = m; opt.textContent = m; monSelect.appendChild(opt); });
-      if(months.has(prevMonth)) monSelect.value = prevMonth;
     }
 
     function openEditModal(id) {
@@ -877,104 +822,228 @@
       document.getElementById('editRemarks').value = order.remarks;
       document.getElementById('editModal').classList.add('active');
     }
+
     function closeModal() { document.getElementById('editModal').classList.remove('active'); currentEditId = null; }
 
     function saveChanges() {
       if(!currentEditId) return;
       const btn = document.getElementById('saveBtn');
-      const oldText = btn.innerText; btn.innerText = "Saving...";
+      const oldText = btn.innerText;
+      btn.innerText = "Saving...";
       
       const newStatus = document.getElementById('editStatus').value;
       const newFilled = document.getElementById('editFilled').value;
       const newPaid = document.getElementById('editPaid').value;
       const newRemarks = document.getElementById('editRemarks').value;
+
       const updates = { id: currentEditId, status: newStatus, filledDate: newFilled, paidDate: newPaid, remarks: newRemarks };
       
+      // 1. Mark as locally modified so background sync doesn't overwrite it immediately
       locallyModified.add(currentEditId);
 
+      // 2. Optimistic UI Update
       const idx = allData.findIndex(d => d.id === currentEditId);
       const oldDataSnapshot = { ...allData[idx] }; 
       
       if(idx > -1) {
-        allData[idx].status = newStatus; allData[idx].filledDate = newFilled; 
-        allData[idx].paidDate = newPaid; allData[idx].remarks = newRemarks;
+        allData[idx].status = newStatus; 
+        allData[idx].filledDate = newFilled; 
+        allData[idx].paidDate = newPaid; 
+        allData[idx].remarks = newRemarks;
         allData[idx].logicStatus = getLogicStatus(allData[idx]);
       }
       
-      applyFilters();
-      closeModal(); showToast("Order Updated!"); btn.innerText = oldText;
+      const filteredIndex = filteredData.findIndex(d => d.id === currentEditId);
+      if(filteredIndex > -1) {
+        filteredData[filteredIndex] = allData[idx];
+        const newCardHTML = generateCardHTML(allData[idx], filteredIndex);
+        const existingCard = document.getElementById(`card-wrapper-${currentEditId}`);
+        if(existingCard) existingCard.outerHTML = newCardHTML;
+      }
+      
+      closeModal(); 
+      showToast("Order Updated!"); 
+      btn.innerText = oldText;
 
       apiCall('updateOrder', updates).then(res => {
           if(!USE_DEMO_MODE && res !== "SUCCESS") { 
-            alert("Sync Error: " + res); allData[idx] = oldDataSnapshot; applyFilters(); locallyModified.delete(currentEditId);
+            alert("Sync Error: " + res); 
+            // Revert on failure
+            allData[idx] = oldDataSnapshot; 
+            if(filteredIndex > -1) filteredData[filteredIndex] = oldDataSnapshot; 
+            applyFilters(); 
+            locallyModified.delete(currentEditId);
+          } 
+          else if (!USE_DEMO_MODE) { 
+            showToast("Synced Successfully!"); 
+            // Keep in locallyModified until next full reload to prevent jitter? 
+            // Actually, safe to keep it there.
           }
-        }).catch(e => { alert("Network Error"); allData[idx] = oldDataSnapshot; applyFilters(); locallyModified.delete(currentEditId); });
+        }).catch(e => { 
+           alert("Network Error - Changes Reverted"); 
+           allData[idx] = oldDataSnapshot; 
+           applyFilters(); 
+           locallyModified.delete(currentEditId);
+        });
     }
 
-    async function downloadCSV() {
-      const btn = document.querySelector('.btn-gold');
-      const orgText = btn.innerHTML; btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> BUILDING CSV...';
-      try {
-        let csvContent = ""; let page = 0; let hasMore = true;
-        while(hasMore) {
-           const res = await apiCall('getCsvChunk', { page: page });
-           if(res.error) throw new Error(res.error);
-           if(res.csv) csvContent += (csvContent ? "\n" : "") + res.csv;
-           hasMore = res.hasMore; page++;
-           btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> PART ${page}...`;
-        }
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob); link.download = "Preorder_Full_Export.csv";
-        link.click(); showToast("Export Complete!");
-      } catch(e) { alert("Export Failed"); } finally { btn.innerHTML = orgText; }
+    function toggleNotifs() {
+        const p = document.getElementById('notifPanel');
+        if(!p.classList.contains('active')) { p.classList.add('active'); fetchLogs(); document.getElementById('notifBadge').classList.remove('show'); } 
+        else { p.classList.remove('active'); }
     }
-
-    function toggleNotifs() { const p = document.getElementById('notifPanel'); if(!p.classList.contains('active')) { p.classList.add('active'); fetchLogs(); document.getElementById('notifBadge').classList.remove('show'); } else { p.classList.remove('active'); } }
-    function fetchLogs() { if(USE_DEMO_MODE) return; apiCall('getRecentLogs').then(renderLogs); }
+    function fetchLogs() { 
+        if(USE_DEMO_MODE) { renderLogs([["10:30 AM", "ORD-TEST", "Demo Log Entry"]]); return; }
+        apiCall('getRecentLogs').then(renderLogs).catch(e => console.log("Log error", e)); 
+    }
     function renderLogs(logs) {
         const list = document.getElementById('notifList');
         if(!logs || logs.length === 0) { list.innerHTML = '<div style="padding:20px; text-align:center; color:#b2bec3;">No recent edits.</div>'; return; }
         list.innerHTML = logs.map(l => `<div class="notif-item"><div class="notif-time">${l[0]}</div><div class="notif-id">${l[1]}</div><div class="notif-detail">${l[2]}</div></div>`).join('');
     }
 
-    // --- CHART LOGIC ---
+    function getCleanMonth(dateStr) {
+      if (!dateStr || dateStr.length < 5) return "Invalid";
+      const parts = dateStr.split('/');
+      if (parts.length === 3) {
+        const d = new Date(parts[2], parts[1]-1, parts[0]);
+        if(isNaN(d.getTime())) return "Invalid";
+        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        return `${months[d.getMonth()]} ${d.getFullYear()}`;
+      }
+      return "Invalid";
+    }
+    function parseDateToTs(str) { if(!str) return 0; const parts = str.trim().split('/'); if(parts.length !== 3) return 0; return new Date(parts[2], parts[1] - 1, parts[0]).getTime(); }
+    function fmt(n) { return n.toLocaleString('en-IN', {style:'currency', currency:'INR', minimumFractionDigits:0}); }
+    function copy(text) {
+        const el = document.createElement('textarea'); el.value = text; el.setAttribute('readonly', ''); el.style.position = 'absolute'; el.style.left = '-9999px'; document.body.appendChild(el); el.select();
+        try { document.execCommand('copy'); showToast("Copied: " + text); } catch (err) { prompt("Copy Manually:", text); } document.body.removeChild(el);
+    }
+    function showToast(msg) {
+        const t = document.getElementById('toastNotification'); document.getElementById('toastMessage').innerText = msg; t.classList.add('active');
+        setTimeout(() => { t.classList.remove('active'); }, 3000); 
+    }
+
+    function switchTab(e, tabName) {
+        document.querySelectorAll('.nav-item').forEach(btn => btn.classList.remove('active'));
+        e.currentTarget.classList.add('active'); 
+        const homeView = document.getElementById('view-home');
+        const graphView = document.getElementById('view-graph');
+        const listView = document.getElementById('view-list');
+        homeView.style.display = 'none'; graphView.style.display = 'none'; listView.style.display = 'none';
+        if (tabName === 'home') { homeView.style.display = 'block'; applyFilters(); } 
+        else if (tabName === 'graph') { graphView.style.display = 'block'; updateGraphRange('7'); } 
+        else if (tabName === 'list') { listView.style.display = 'block'; applyFilters(); }
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    
+    // ==========================================
+    // ANALYTICS & GRAPH ENGINE
+    // ==========================================
+    
     function initGraph() {
-        if(chartInstances['revenue']) return;
-        chartInstances['revenue'] = new Chart(document.getElementById('revenueChart'), { type: 'line', data: { labels: [], datasets: [{ label: 'Revenue', data: [], borderColor: '#00b894', backgroundColor: 'rgba(0, 184, 148, 0.1)', tension: 0.4, fill: true }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: {display:false} }, scales: { x: { grid: {display:false} }, y: { grid: { color: 'rgba(0,0,0,0.05)' } } } } });
-        chartInstances['velocity'] = new Chart(document.getElementById('velocityChart'), { type: 'bar', data: { labels: [], datasets: [{ label: 'Orders', data: [], backgroundColor: '#0984e3', borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: {display:false} }, scales: { x: { grid: {display:false} }, y: { grid: {display:false} } } } });
-        chartInstances['status'] = new Chart(document.getElementById('statusChart'), { type: 'doughnut', data: { labels: ['Paid', 'Pending', 'Warning', 'Queues'], datasets: [{ data: [0,0,0,0], backgroundColor: ['#00b894', '#ff7675', '#d63031', '#6c5ce7'], borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { usePointStyle: true, boxWidth: 8 } } } } });
+        if(chartInstances['revenue']) return; // Already init
+        
+        // 1. Revenue Line Chart
+        chartInstances['revenue'] = new Chart(document.getElementById('revenueChart'), {
+            type: 'line',
+            data: { labels: [], datasets: [{ label: 'Revenue', data: [], borderColor: '#00b894', backgroundColor: 'rgba(0, 184, 148, 0.1)', tension: 0.4, fill: true }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: {display:false} }, scales: { x: { grid: {display:false} }, y: { grid: { color: 'rgba(0,0,0,0.05)' } } } }
+        });
+
+        // 2. Velocity Bar Chart
+        chartInstances['velocity'] = new Chart(document.getElementById('velocityChart'), {
+            type: 'bar',
+            data: { labels: [], datasets: [{ label: 'Orders', data: [], backgroundColor: '#0984e3', borderRadius: 4 }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: {display:false} }, scales: { x: { grid: {display:false} }, y: { grid: {display:false} } } }
+        });
+
+        // 3. Status Doughnut
+        chartInstances['status'] = new Chart(document.getElementById('statusChart'), {
+            type: 'doughnut',
+            data: { labels: ['Paid', 'Pending', 'Warning', 'Queues'], datasets: [{ data: [0,0,0,0], backgroundColor: ['#00b894', '#ff7675', '#d63031', '#6c5ce7'], borderWidth: 0 }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { usePointStyle: true, boxWidth: 8 } } } }
+        });
     }
 
     function updateGraphRange(range) {
+        // UI Updates
         document.querySelectorAll('.pill-btn').forEach(b => b.classList.remove('active'));
         if(event && event.target) event.target.classList.add('active');
-        const now = new Date(), cutoff = new Date();
+        else document.querySelector('.pill-btn:first-child').classList.add('active');
+
+        const now = new Date();
+        const cutoff = new Date();
         if(range === '7') cutoff.setDate(now.getDate() - 7);
         if(range === '30') cutoff.setDate(now.getDate() - 30);
         if(range === 'ALL') cutoff.setFullYear(2020);
-        
-        const subset = allData.filter(d => parseDateToTs(d.deliveryDate) >= cutoff.getTime());
-        const grouped = {}; let tRev=0, tOrd=subset.length, sPaid=0, sPend=0, sWarn=0, sQueue=0;
+
+        const subset = allData.filter(d => {
+            if(!d.deliveryDate) return false;
+            const ts = parseDateToTs(d.deliveryDate);
+            return ts >= cutoff.getTime();
+        });
+
+        const grouped = {};
+        let totalRev = 0, totalOrders = subset.length;
+        let sPaid=0, sPend=0, sWarn=0, sQueue=0;
 
         subset.forEach(d => {
-            if(!grouped[d.deliveryDate]) grouped[d.deliveryDate] = { rev:0, count:0 };
-            grouped[d.deliveryDate].rev += d.total; grouped[d.deliveryDate].count++; tRev+=d.total;
-            if(d.status==='PAID') sPaid++; else if(d.status==='PENDING') sPend++; else if(d.status==='WARNING') sWarn++; else sQueue++;
+            const dateKey = d.deliveryDate;
+            if(!grouped[dateKey]) grouped[dateKey] = { rev:0, count:0 };
+            grouped[dateKey].rev += d.total;
+            grouped[dateKey].count += 1;
+            totalRev += d.total;
+
+            if(d.status === 'PAID') sPaid++;
+            else if(d.status === 'PENDING') sPend++;
+            else if(d.status === 'WARNING') sWarn++;
+            else sQueue++;
         });
 
         const sortedKeys = Object.keys(grouped).sort((a,b) => parseDateToTs(a) - parseDateToTs(b));
-        if(chartInstances['revenue']) { chartInstances['revenue'].data.labels = sortedKeys.map(k=>k.substring(0,5)); chartInstances['revenue'].data.datasets[0].data = sortedKeys.map(k=>grouped[k].rev); chartInstances['revenue'].update(); }
-        if(chartInstances['velocity']) { chartInstances['velocity'].data.labels = sortedKeys.map(k=>k.substring(0,5)); chartInstances['velocity'].data.datasets[0].data = sortedKeys.map(k=>grouped[k].count); chartInstances['velocity'].update(); }
-        if(chartInstances['status']) { chartInstances['status'].data.datasets[0].data = [sPaid, sPend, sWarn, sQueue]; chartInstances['status'].update(); }
+        const labels = sortedKeys.map(k => k.substring(0,5)); 
+        const dataRev = sortedKeys.map(k => grouped[k].rev);
+        const dataVel = sortedKeys.map(k => grouped[k].count);
 
-        document.getElementById('graphKpiGrid').innerHTML = `<div class="stat-card" style="background:var(--grad-blue)"><div class="stat-title">Period Revenue</div><div class="stat-value">${fmt(tRev)}</div></div><div class="stat-card" style="background:var(--grad-purple)"><div class="stat-title">Total Orders</div><div class="stat-value">${tOrd}</div></div><div class="stat-card" style="background:var(--grad-orange)"><div class="stat-title">Avg Value</div><div class="stat-value">${fmt(tOrd>0?tRev/tOrd:0)}</div></div>`;
+        if(chartInstances['revenue']) {
+            chartInstances['revenue'].data.labels = labels;
+            chartInstances['revenue'].data.datasets[0].data = dataRev;
+            chartInstances['revenue'].update();
+        }
+        if(chartInstances['velocity']) {
+            chartInstances['velocity'].data.labels = labels;
+            chartInstances['velocity'].data.datasets[0].data = dataVel;
+            chartInstances['velocity'].update();
+        }
+        if(chartInstances['status']) {
+            chartInstances['status'].data.datasets[0].data = [sPaid, sPend, sWarn, sQueue];
+            chartInstances['status'].update();
+        }
+
+        const avgOrder = totalOrders > 0 ? totalRev / totalOrders : 0;
+        document.getElementById('graphKpiGrid').innerHTML = `
+            <div class="stat-card" style="background:var(--grad-blue)">
+                <div class="stat-title">Period Revenue</div><div class="stat-value">${fmt(totalRev)}</div>
+            </div>
+            <div class="stat-card" style="background:var(--grad-purple)">
+                <div class="stat-title">Total Orders</div><div class="stat-value">${totalOrders}</div>
+            </div>
+            <div class="stat-card" style="background:var(--grad-orange)">
+                <div class="stat-title">Avg Value</div><div class="stat-value">${fmt(avgOrder)}</div>
+            </div>
+        `;
     }
 
-    function getCleanMonth(str) { if (!str || str.length < 5) return "Invalid"; const p = str.split('/'); return p.length === 3 ? `${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][parseInt(p[1])-1]} ${p[2]}` : "Invalid"; }
-    function parseDateToTs(str) { if(!str) return 0; const p = str.trim().split('/'); return p.length === 3 ? new Date(p[2], p[1] - 1, p[0]).getTime() : 0; }
-    function fmt(n) { return n.toLocaleString('en-IN', {style:'currency', currency:'INR', minimumFractionDigits:0}); }
-    function copy(text) { navigator.clipboard.writeText(text).then(()=>showToast("Copied!")).catch(()=>prompt("Copy:", text)); }
-    function showToast(msg) { const t = document.getElementById('toastNotification'); document.getElementById('toastMessage').innerText = msg; t.classList.add('active'); setTimeout(() => t.classList.remove('active'), 3000); }
-    function switchTab(e, name) { document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active')); e.currentTarget.classList.add('active'); document.querySelectorAll('.view-section').forEach(v=>v.style.display='none'); document.getElementById('view-'+name).style.display='block'; if(name==='home'||name==='list') applyFilters(); else if(name==='graph') updateGraphRange('7'); window.scrollTo({ top: 0, behavior: 'smooth' }); }
-                  </script>
+    let lastScrollTop = 0;
+    const navBar = document.getElementById('mainNavBar');
+    window.addEventListener('scroll', function() {
+        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        if (Math.abs(scrollTop - lastScrollTop) < 10) return;
+        if (scrollTop > lastScrollTop && scrollTop > 100) navBar.classList.add('nav-hidden');
+        else navBar.classList.remove('nav-hidden');
+        lastScrollTop = scrollTop;
+    });
+
+    setInterval(()=>{ if(!USE_DEMO_MODE) apiCall('serverPing').catch(e => console.log("Ping failed")); }, 180000);
+              </script>
